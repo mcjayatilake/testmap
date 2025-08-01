@@ -100,6 +100,7 @@
         const loadingOverlay = document.getElementById('loading-overlay');
         const modal = document.getElementById('custom-modal');
         const modalMessage = document.getElementById('modal-message');
+        let currentLatLng = null;
 
         // Function to show custom modal
         function showModal(message) {
@@ -112,88 +113,81 @@
             modal.classList.add('hidden');
         }
 
-        // This function will initialize the map
-        async function initializeMapAndGeolocation() {
-            try {
-                // We're using the async loading pattern, so we wait for the google object to be available
-                if (typeof google === 'undefined' || typeof google.maps === 'undefined') {
-                    throw new Error("Google Maps API is not loaded.");
+        // Interpolation function for smooth panning
+        function animateMapPan(start, end, duration) {
+            let startTime = null;
+
+            function step(timestamp) {
+                if (!startTime) startTime = timestamp;
+                const progress = timestamp - startTime;
+                const t = Math.min(progress / duration, 1);
+
+                const newLat = start.lat + (end.lat - start.lat) * t;
+                const newLng = start.lng + (end.lng - start.lng) * t;
+
+                map.setCenter({ lat: newLat, lng: newLng });
+
+                if (t < 1) {
+                    window.requestAnimationFrame(step);
                 }
-
-                // Hide the loading overlay
-                loadingOverlay.classList.add('hidden');
-
-                // Check if geolocation is supported
-                if (!navigator.geolocation) {
-                    showModal('Geolocation is not supported by your browser.');
-                    return;
-                }
-
-                const initialPosition = { lat: 34.0522, lng: -118.2437 }; // Default to Los Angeles
-
-                // Initialize the map
-                map = new google.maps.Map(document.getElementById('map'), {
-                    zoom: 17,
-                    center: initialPosition,
-                    disableDefaultUI: true,
-                    heading: 0,
-                    tilt: 45,
-                });
-
-                // Create the driver icon, fixed in the center of the viewport
-                const driverIcon = document.createElement('div');
-                driverIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 100 100" class="animate-pulse">
-                    <path d="M50,20 L60,40 L50,80 L40,40 Z" fill="#1a73e8" stroke="#ffffff" stroke-width='3'/>
-                    <path d="M50,20 L60,40 L50,80 L40,40 Z" fill="#ffffff" transform="scale(0.8) translate(12.5,12.5)"/>
-                </svg>`;
-                driverIcon.style.position = 'absolute';
-                driverIcon.style.top = '50%';
-                driverIcon.style.left = '50%';
-                driverIcon.style.transform = 'translate(-50%, -50%)';
-                document.getElementById('map').appendChild(driverIcon);
-
-                // Watch for position and orientation changes
-                navigator.geolocation.watchPosition(
-                    (position) => {
-                        const { latitude, longitude, heading } = position.coords;
-                        const newPosition = { lat: latitude, lng: longitude };
-                        
-                        // Update the info panel
-                        document.getElementById('latitude').textContent = latitude.toFixed(6);
-                        document.getElementById('longitude').textContent = longitude.toFixed(6);
-                        document.getElementById('heading').textContent = heading !== null ? heading.toFixed(2) : 'N/A';
-                        
-                        // Smoothly pan the map to the new position
-                        map.panTo(newPosition);
-
-                        // Update the map's heading/rotation
-                        if (heading !== null) {
-                            map.setHeading(heading);
-                        }
-                    },
-                    (error) => {
-                        console.error('Geolocation error:', error);
-                        showModal(`Geolocation error: ${error.message}. Please enable location services.`);
-                    },
-                    { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
-                );
-            } catch (error) {
-                loadingOverlay.classList.add('hidden');
-                console.error("Error initializing the map:", error);
-                showModal("Failed to initialize the map. Please check your API key and the browser console for details.");
             }
+
+            window.requestAnimationFrame(step);
         }
 
-        // Add a listener for when the document is ready
-        document.addEventListener('DOMContentLoaded', () => {
-            // We use setTimeout to ensure the script has a moment to load and the Google object is defined.
-            // This is a simple but effective way to handle the async loading without a callback.
-            setTimeout(() => {
-                initializeMapAndGeolocation();
-            }, 500); // 500ms delay to be safe
-        });
+        // This function will initialize the map
+        function initMap() {
+            // Hide the loading overlay
+            loadingOverlay.classList.add('hidden');
+
+            // Check if geolocation is supported
+            if (!navigator.geolocation) {
+                showModal('Geolocation is not supported by your browser.');
+                return;
+            }
+
+            const initialPosition = { lat: 34.0522, lng: -118.2437 }; // Default to Los Angeles
+
+            // Initialize the map
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 17,
+                center: initialPosition,
+                disableDefaultUI: true,
+                heading: 0,
+                tilt: 45,
+            });
+            currentLatLng = new google.maps.LatLng(initialPosition.lat, initialPosition.lng);
+
+            // Watch for position and orientation changes
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    const { latitude, longitude, heading } = position.coords;
+                    const newPosition = { lat: latitude, lng: longitude };
+                    
+                    // Update the info panel
+                    document.getElementById('latitude').textContent = latitude.toFixed(6);
+                    document.getElementById('longitude').textContent = longitude.toFixed(6);
+                    document.getElementById('heading').textContent = heading !== null ? heading.toFixed(2) : 'N/A';
+                    
+                    // Animate the map's pan to the new position
+                    const newLatLng = new google.maps.LatLng(newPosition.lat, newPosition.lng);
+                    animateMapPan({ lat: currentLatLng.lat(), lng: currentLatLng.lng() }, newPosition, 1000); // 1000ms animation
+                    currentLatLng = newLatLng;
+
+                    // Update the map's heading/rotation
+                    if (heading !== null) {
+                        map.setHeading(heading);
+                    }
+                },
+                (error) => {
+                    console.error('Geolocation error:', error);
+                    showModal(`Geolocation error: ${error.message}. Please enable location services.`);
+                },
+                { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
+            );
+        }
     </script>
     <!-- Include the Google Maps API script directly in the HTML -->
-    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBNXxpyZy_TuuhZsnJrYGlzJb7kr2UAQAc"></script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBNXxpyZy_TuuhZsnJrYGlzJb7kr2UAQAc&callback=initMap"></script>
 </body>
 </html>
