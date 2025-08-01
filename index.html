@@ -153,28 +153,33 @@
             });
             currentLatLng = new google.maps.LatLng(initialPosition.lat, initialPosition.lng);
 
-            // Request permission for Device Orientation on iOS 13+
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                DeviceOrientationEvent.requestPermission()
-                    .then(permissionState => {
-                        if (permissionState === 'granted') {
-                            window.addEventListener('deviceorientation', handleOrientation);
-                        } else {
-                            console.warn("Permission for device orientation was denied.");
-                        }
-                    })
-                    .catch(console.error);
-            } else {
-                // For older browsers, just add the event listener
-                window.addEventListener('deviceorientation', handleOrientation);
+            // Request permission for Device Orientation and listen for the event
+            function requestOrientationPermission() {
+                if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    // This is for iOS 13+
+                    DeviceOrientationEvent.requestPermission()
+                        .then(permissionState => {
+                            if (permissionState === 'granted') {
+                                window.addEventListener('deviceorientation', handleOrientation);
+                                console.log("Device orientation permission granted.");
+                            } else {
+                                showModal("Permission for device orientation was denied. The map will not rotate.");
+                            }
+                        })
+                        .catch(console.error);
+                } else {
+                    // For older browsers and Android
+                    window.addEventListener('deviceorientation', handleOrientation);
+                }
             }
 
             // Handler for device orientation
             function handleOrientation(event) {
-                // The alpha value is the compass heading. It's null in some browsers if the device isn't moving
+                // The alpha value is the compass heading relative to North
                 if (event.alpha !== null) {
                     // Update the map's heading, which is the map's rotation
-                    map.setHeading(360 - event.alpha); // 360 - alpha to match the map's north-up convention
+                    // We subtract from 360 to ensure North is up
+                    map.setHeading(360 - event.alpha);
                     // Update info panel
                     document.getElementById('heading').textContent = (360 - event.alpha).toFixed(2);
                 }
@@ -201,6 +206,9 @@
                 },
                 { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
             );
+
+            // Request permission to start the orientation listener
+            requestOrientationPermission();
         }
     </script>
     <!-- Include the Google Maps API script directly in the HTML -->
