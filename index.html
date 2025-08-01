@@ -116,22 +116,17 @@
         // Interpolation function for smooth panning
         function animateMapPan(start, end, duration) {
             let startTime = null;
-
             function step(timestamp) {
                 if (!startTime) startTime = timestamp;
                 const progress = timestamp - startTime;
                 const t = Math.min(progress / duration, 1);
-
                 const newLat = start.lat + (end.lat - start.lat) * t;
                 const newLng = start.lng + (end.lng - start.lng) * t;
-
                 map.setCenter({ lat: newLat, lng: newLng });
-
                 if (t < 1) {
                     window.requestAnimationFrame(step);
                 }
             }
-
             window.requestAnimationFrame(step);
         }
 
@@ -139,7 +134,7 @@
         function initMap() {
             // Hide the loading overlay
             loadingOverlay.classList.add('hidden');
-
+            
             // Check if geolocation is supported
             if (!navigator.geolocation) {
                 showModal('Geolocation is not supported by your browser.');
@@ -158,26 +153,47 @@
             });
             currentLatLng = new google.maps.LatLng(initialPosition.lat, initialPosition.lng);
 
-            // Watch for position and orientation changes
+            // Request permission for Device Orientation on iOS 13+
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation);
+                        } else {
+                            console.warn("Permission for device orientation was denied.");
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                // For older browsers, just add the event listener
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
+
+            // Handler for device orientation
+            function handleOrientation(event) {
+                // The alpha value is the compass heading. It's null in some browsers if the device isn't moving
+                if (event.alpha !== null) {
+                    // Update the map's heading, which is the map's rotation
+                    map.setHeading(360 - event.alpha); // 360 - alpha to match the map's north-up convention
+                    // Update info panel
+                    document.getElementById('heading').textContent = (360 - event.alpha).toFixed(2);
+                }
+            }
+
+            // Watch for position changes to pan the map
             navigator.geolocation.watchPosition(
                 (position) => {
-                    const { latitude, longitude, heading } = position.coords;
+                    const { latitude, longitude } = position.coords;
                     const newPosition = { lat: latitude, lng: longitude };
                     
                     // Update the info panel
                     document.getElementById('latitude').textContent = latitude.toFixed(6);
                     document.getElementById('longitude').textContent = longitude.toFixed(6);
-                    document.getElementById('heading').textContent = heading !== null ? heading.toFixed(2) : 'N/A';
-                    
+
                     // Animate the map's pan to the new position
                     const newLatLng = new google.maps.LatLng(newPosition.lat, newPosition.lng);
                     animateMapPan({ lat: currentLatLng.lat(), lng: currentLatLng.lng() }, newPosition, 1000); // 1000ms animation
                     currentLatLng = newLatLng;
-
-                    // Update the map's heading/rotation
-                    if (heading !== null) {
-                        map.setHeading(heading);
-                    }
                 },
                 (error) => {
                     console.error('Geolocation error:', error);
